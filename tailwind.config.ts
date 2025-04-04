@@ -107,8 +107,23 @@ export default {
 				'accordion-down': 'accordion-down 0.2s ease-out',
 				'accordion-up': 'accordion-up 0.2s ease-out',
 				'pulse-slow': 'pulse-slow 3s infinite',
+			},
+			strokeWidth: {
+				'1': '1',
+				'2': '2',
+				'3': '3',
 			}
 		}
 	},
-	plugins: [require("tailwindcss-animate")],
+	plugins: [
+		require("tailwindcss-animate"),
+		function({ addUtilities }) {
+			const newUtilities = {
+				'.stroke-dashed': {
+					'stroke-dasharray': '6 6',
+				},
+			};
+			addUtilities(newUtilities);
+		}
+	],
 } satisfies Config;
