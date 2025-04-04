@@ -1,3 +1,4 @@
+
 import type { Config } from "tailwindcss";
 
 export default {
@@ -61,6 +62,26 @@ export default {
 					'accent-foreground': 'hsl(var(--sidebar-accent-foreground))',
 					border: 'hsl(var(--sidebar-border))',
 					ring: 'hsl(var(--sidebar-ring))'
+				},
+				// Custom colors for Vaayu Drushti
+				vaayu: {
+					blue: '#0EA5E9',
+					lightBlue: '#D3E4FD',
+					green: '#10B981',
+					lightGreen: '#F2FCE2',
+					yellow: '#F59E0B',
+					orange: '#F97316',
+					red: '#EF4444',
+					purple: '#8B5CF6',
+					lightPurple: '#E5DEFF',
+				},
+				aqi: {
+					good: '#10B981',      // Green - Good AQI
+					moderate: '#F59E0B',  // Yellow - Moderate AQI
+					unhealthy: '#F97316', // Orange - Unhealthy for Sensitive Groups
+					bad: '#EF4444',       // Red - Unhealthy
+					severe: '#7E22CE',    // Purple - Very Unhealthy
+					hazardous: '#991B1B', // Dark Red - Hazardous
 				}
 			},
 			borderRadius: {
@@ -70,25 +91,22 @@ export default {
 			},
 			keyframes: {
 				'accordion-down': {
-					from: {
-						height: '0'
-					},
-					to: {
-						height: 'var(--radix-accordion-content-height)'
-					}
+					from: { height: '0' },
+					to: { height: 'var(--radix-accordion-content-height)' },
 				},
 				'accordion-up': {
-					from: {
-						height: 'var(--radix-accordion-content-height)'
-					},
-					to: {
-						height: '0'
-					}
+					from: { height: 'var(--radix-accordion-content-height)' },
+					to: { height: '0' },
+				},
+				'pulse-slow': {
+					'0%, 100%': { opacity: '1' },
+					'50%': { opacity: '0.8' },
 				}
 			},
 			animation: {
 				'accordion-down': 'accordion-down 0.2s ease-out',
-				'accordion-up': 'accordion-up 0.2s ease-out'
+				'accordion-up': 'accordion-up 0.2s ease-out',
+				'pulse-slow': 'pulse-slow 3s infinite',
 			}
 		}
 	},
