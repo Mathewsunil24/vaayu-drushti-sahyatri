@@ -1,8 +1,23 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { MapPin, Navigation, AlertTriangle, MapIcon } from 'lucide-react';
+import { MapPin, Navigation, AlertTriangle, MapIcon, LocateFixed } from 'lucide-react';
 import AqiIndicator from './AqiIndicator';
+import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
+
+// Fix for default marker icons in Leaflet
+const defaultIcon = L.icon({
+  iconUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon.png',
+  iconRetinaUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon-2x.png',
+  shadowUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41]
+});
+
+L.Marker.prototype.options.icon = defaultIcon;
 
 // Mock data for AQI points
 const mockAqiPoints = [
@@ -13,9 +28,63 @@ const mockAqiPoints = [
   { id: 5, lat: 38, lng: 38, value: 165, location: "Highway Junction" },
 ];
 
+// Custom component to handle map center updates
+const ChangeView = ({ center }: { center: [number, number] }) => {
+  const map = useMap();
+  useEffect(() => {
+    map.setView(center, map.getZoom());
+  }, [center, map]);
+  return null;
+};
+
 const AirQualityMap: React.FC = () => {
   const [selectedLocation, setSelectedLocation] = useState(mockAqiPoints[0]);
-  
+  const [mapCenter, setMapCenter] = useState<[number, number]>([40, 40]);
+  const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
+  const [locationError, setLocationError] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Get user's current location
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude } = position.coords;
+          setUserLocation([latitude, longitude]);
+          setMapCenter([latitude, longitude]);
+        },
+        (error) => {
+          setLocationError(error.message);
+          console.error('Error getting location:', error);
+        }
+      );
+    } else {
+      setLocationError('Geolocation is not supported by your browser');
+    }
+  }, []);
+
+  const handleMarkerClick = (location: typeof mockAqiPoints[0]) => {
+    setSelectedLocation(location);
+    setMapCenter([location.lat, location.lng]);
+  };
+
+  const handleLocateClick = () => {
+    if (userLocation) {
+      setMapCenter(userLocation);
+    } else if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude } = position.coords;
+          setUserLocation([latitude, longitude]);
+          setMapCenter([latitude, longitude]);
+        },
+        (error) => {
+          setLocationError(error.message);
+          console.error('Error getting location:', error);
+        }
+      );
+    }
+  };
+
   return (
     <Card className="h-full">
       <CardHeader className="pb-2">
@@ -25,51 +94,82 @@ const AirQualityMap: React.FC = () => {
         </CardTitle>
       </CardHeader>
       <CardContent className="p-0 pb-4 relative">
-        {/* This would be replaced with an actual map component in a real implementation */}
-        <div className="map-container bg-vaayu-lightBlue p-4">
-          <div className="h-full w-full flex items-center justify-center">
-            <div className="text-center text-muted-foreground">
-              <MapIcon size={48} className="mx-auto mb-4 opacity-50" />
-              <p>Interactive AQI map would render here</p>
-              <p className="text-xs mt-2">Using an actual mapping library like Google Maps, Mapbox, or Leaflet</p>
-            </div>
-          </div>
-          
-          <div className="absolute bottom-4 left-4 right-4 bg-white/90 backdrop-blur rounded-lg p-3 shadow-lg">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
-              <div className="flex items-center">
-                <MapPin className="text-vaayu-purple mr-2" size={18} />
-                <span className="font-medium">{selectedLocation.location}</span>
-              </div>
-              
-              <div className="flex items-center">
-                <span className="mr-2">Current AQI:</span>
-                <AqiIndicator value={selectedLocation.value} size="sm" />
-              </div>
-            </div>
-          </div>
+        <div className="map-container h-[400px] w-full">
+          <MapContainer
+            center={mapCenter}
+            zoom={12}
+            style={{ height: '100%', width: '100%' }}
+          >
+            <ChangeView center={mapCenter} />
+            <TileLayer
+              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            />
+            {userLocation && (
+              <Marker
+                position={userLocation}
+                icon={L.divIcon({
+                  className: 'current-location-marker',
+                  html: '<div class="w-4 h-4 bg-vaayu-blue rounded-full border-2 border-white shadow-lg"></div>',
+                  iconSize: [16, 16],
+                  iconAnchor: [8, 8]
+                })}
+              >
+                <Popup>Your Location</Popup>
+              </Marker>
+            )}
+            {mockAqiPoints.map((point) => (
+              <Marker
+                key={point.id}
+                position={[point.lat, point.lng]}
+                eventHandlers={{
+                  click: () => handleMarkerClick(point),
+                }}
+              >
+                <Popup>
+                  <div className="flex flex-col items-center gap-2">
+                    <span className="font-medium">{point.location}</span>
+                    <AqiIndicator value={point.value} size="sm" />
+                  </div>
+                </Popup>
+              </Marker>
+            ))}
+          </MapContainer>
+        </div>
 
-          <div className="absolute top-4 right-4 bg-white rounded-full p-2 shadow-md">
-            <Navigation className="text-vaayu-blue" size={24} />
-          </div>
-          
-          {/* Sample AQI markers */}
-          <div className="absolute top-1/4 left-1/4 cursor-pointer" onClick={() => setSelectedLocation(mockAqiPoints[0])}>
-            <AqiIndicator value={35} size="sm" showLabel={false} />
-          </div>
-          
-          <div className="absolute top-1/3 right-1/3 cursor-pointer" onClick={() => setSelectedLocation(mockAqiPoints[1])}>
-            <AqiIndicator value={75} size="sm" showLabel={false} />
-          </div>
-          
-          <div className="absolute bottom-1/3 right-1/4 cursor-pointer" onClick={() => setSelectedLocation(mockAqiPoints[2])}>
-            <AqiIndicator value={125} size="sm" showLabel={false} />
-          </div>
-          
-          <div className="absolute bottom-1/4 left-1/3 cursor-pointer" onClick={() => setSelectedLocation(mockAqiPoints[4])}>
-            <AqiIndicator value={165} size="sm" showLabel={false} />
+        <div className="absolute bottom-4 left-4 right-4 bg-white/90 backdrop-blur rounded-lg p-3 shadow-lg z-[1000]">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+            <div className="flex items-center">
+              <MapPin className="text-vaayu-purple mr-2" size={18} />
+              <span className="font-medium">{selectedLocation.location}</span>
+            </div>
+            
+            <div className="flex items-center">
+              <span className="mr-2">Current AQI:</span>
+              <AqiIndicator value={selectedLocation.value} size="sm" />
+            </div>
           </div>
         </div>
+
+        <div className="absolute top-4 right-4 flex gap-2">
+          <button
+            onClick={handleLocateClick}
+            className="bg-white rounded-full p-2 shadow-md hover:bg-gray-50 transition-colors"
+            title="Locate me"
+          >
+            <LocateFixed className="text-vaayu-blue" size={24} />
+          </button>
+          <div className="bg-white rounded-full p-2 shadow-md">
+            <Navigation className="text-vaayu-blue" size={24} />
+          </div>
+        </div>
+
+        {locationError && (
+          <div className="absolute top-16 right-4 bg-red-100 text-red-800 px-4 py-2 rounded-lg shadow-md z-[1000]">
+            <AlertTriangle className="inline-block mr-2" size={16} />
+            {locationError}
+          </div>
+        )}
         
         <div className="p-4">
           <div className="flex flex-wrap gap-3 justify-center">
