@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { MapPin, Navigation, AlertTriangle, MapIcon, LocateFixed } from 'lucide-react';
+import { MapPin, Navigation, AlertTriangle, MapIcon, LocateFixed, Search } from 'lucide-react';
 import AqiIndicator from './AqiIndicator';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 
 // Fix for default marker icons in Leaflet
 const defaultIcon = L.icon({
@@ -19,13 +21,21 @@ const defaultIcon = L.icon({
 
 L.Marker.prototype.options.icon = defaultIcon;
 
+interface LocationData {
+  lat: string;
+  lon: string;
+  display_name: string;
+  aqi?: number;
+  locationType?: string;
+}
+
 // Mock data for AQI points
-const mockAqiPoints = [
-  { id: 1, lat: 40, lng: 40, value: 35, location: "Downtown" },
-  { id: 2, lat: 41, lng: 41, value: 75, location: "North End" },
-  { id: 3, lat: 39, lng: 42, value: 125, location: "Industrial Zone" },
-  { id: 4, lat: 42, lng: 39, value: 55, location: "Residential Area" },
-  { id: 5, lat: 38, lng: 38, value: 165, location: "Highway Junction" },
+const mockAqiPoints: LocationData[] = [
+  { lat: '40', lon: '40', display_name: "Downtown", aqi: 35, locationType: 'urban' },
+  { lat: '41', lon: '41', display_name: "North End", aqi: 75, locationType: 'residential' },
+  { lat: '39', lon: '42', display_name: "Industrial Zone", aqi: 125, locationType: 'industrial' },
+  { lat: '42', lon: '39', display_name: "Residential Area", aqi: 55, locationType: 'residential' },
+  { lat: '38', lon: '38', display_name: "Highway Junction", aqi: 165, locationType: 'industrial' },
 ];
 
 // Custom component to handle map center updates
@@ -37,11 +47,46 @@ const ChangeView = ({ center }: { center: [number, number] }) => {
   return null;
 };
 
+interface SearchResult {
+  lat: string;
+  lon: string;
+  display_name: string;
+}
+
+// Function to determine location type based on name
+const getLocationType = (name: string): string => {
+  const lowerName = name.toLowerCase();
+  if (lowerName.includes('industrial') || lowerName.includes('factory')) return 'industrial';
+  if (lowerName.includes('residential') || lowerName.includes('housing')) return 'residential';
+  if (lowerName.includes('downtown') || lowerName.includes('city center')) return 'urban';
+  if (lowerName.includes('park') || lowerName.includes('green')) return 'green';
+  return 'mixed';
+};
+
+// Function to generate AQI based on location type
+const generateAqiForLocation = (locationType: string): number => {
+  const ranges = {
+    industrial: { min: 100, max: 200 },
+    urban: { min: 50, max: 150 },
+    residential: { min: 30, max: 100 },
+    green: { min: 0, max: 50 },
+    mixed: { min: 40, max: 120 }
+  };
+  
+  const range = ranges[locationType as keyof typeof ranges] || ranges.mixed;
+  return Math.floor(Math.random() * (range.max - range.min + 1)) + range.min;
+};
+
 const AirQualityMap: React.FC = () => {
-  const [selectedLocation, setSelectedLocation] = useState(mockAqiPoints[0]);
+  const [selectedLocation, setSelectedLocation] = useState<LocationData>(mockAqiPoints[0]);
   const [mapCenter, setMapCenter] = useState<[number, number]>([40, 40]);
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<LocationData[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchedLocation, setSearchedLocation] = useState<LocationData | null>(null);
+  const [isLoadingAqi, setIsLoadingAqi] = useState(false);
 
   useEffect(() => {
     // Get user's current location
@@ -62,9 +107,41 @@ const AirQualityMap: React.FC = () => {
     }
   }, []);
 
-  const handleMarkerClick = (location: typeof mockAqiPoints[0]) => {
-    setSelectedLocation(location);
-    setMapCenter([location.lat, location.lng]);
+  const updateLocationAqi = async (location: LocationData) => {
+    setIsLoadingAqi(true);
+    try {
+      // Simulate API delay
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      const locationType = getLocationType(location.display_name);
+      const aqi = generateAqiForLocation(locationType);
+      
+      return {
+        ...location,
+        aqi,
+        locationType
+      };
+    } catch (error) {
+      console.error('Error fetching AQI:', error);
+      return location;
+    } finally {
+      setIsLoadingAqi(false);
+    }
+  };
+
+  const handleLocationSelect = async (location: LocationData) => {
+    const locationWithAqi = await updateLocationAqi(location);
+    setSearchedLocation(locationWithAqi);
+    setSelectedLocation(locationWithAqi);
+    setMapCenter([parseFloat(location.lat), parseFloat(location.lon)]);
+    setSearchResults([]);
+    setSearchQuery(location.display_name);
+  };
+
+  const handleMarkerClick = async (location: LocationData) => {
+    const locationWithAqi = await updateLocationAqi(location);
+    setSelectedLocation(locationWithAqi);
+    setMapCenter([parseFloat(location.lat), parseFloat(location.lon)]);
   };
 
   const handleLocateClick = () => {
@@ -85,6 +162,24 @@ const AirQualityMap: React.FC = () => {
     }
   };
 
+  const handleSearch = async () => {
+    if (!searchQuery.trim()) return;
+    
+    setIsSearching(true);
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}&limit=5`
+      );
+      const data = await response.json();
+      setSearchResults(data);
+    } catch (error) {
+      setLocationError('Error searching for location');
+      console.error('Search error:', error);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
   return (
     <Card className="h-full">
       <CardHeader className="pb-2">
@@ -94,6 +189,41 @@ const AirQualityMap: React.FC = () => {
         </CardTitle>
       </CardHeader>
       <CardContent className="p-0 pb-4 relative">
+        <div className="absolute top-4 left-4 z-[1000] w-80">
+          <div className="relative">
+            <Input
+              type="text"
+              placeholder="Search location..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+              className="pr-10"
+            />
+            <Button
+              size="icon"
+              variant="ghost"
+              className="absolute right-0 top-0 h-full px-3"
+              onClick={handleSearch}
+              disabled={isSearching}
+            >
+              <Search className="h-4 w-4" />
+            </Button>
+          </div>
+          {searchResults.length > 0 && (
+            <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-lg shadow-lg max-h-60 overflow-y-auto">
+              {searchResults.map((result, index) => (
+                <button
+                  key={index}
+                  className="w-full text-left px-4 py-2 hover:bg-gray-100 transition-colors"
+                  onClick={() => handleLocationSelect(result)}
+                >
+                  {result.display_name}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
         <div className="map-container h-[400px] w-full">
           <MapContainer
             center={mapCenter}
@@ -118,18 +248,45 @@ const AirQualityMap: React.FC = () => {
                 <Popup>Your Location</Popup>
               </Marker>
             )}
+            {searchedLocation && (
+              <Marker
+                position={[parseFloat(searchedLocation.lat), parseFloat(searchedLocation.lon)]}
+                icon={L.divIcon({
+                  className: 'searched-location-marker',
+                  html: '<div class="w-4 h-4 bg-vaayu-purple rounded-full border-2 border-white shadow-lg"></div>',
+                  iconSize: [16, 16],
+                  iconAnchor: [8, 8]
+                })}
+              >
+                <Popup>
+                  <div className="flex flex-col items-center gap-2">
+                    <span className="font-medium">{searchedLocation.display_name}</span>
+                    {isLoadingAqi ? (
+                      <div className="text-sm text-muted-foreground">Loading AQI...</div>
+                    ) : (
+                      <>
+                        <AqiIndicator value={searchedLocation.aqi || 0} size="sm" />
+                        <div className="text-xs text-muted-foreground">
+                          {searchedLocation.locationType} area
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </Popup>
+              </Marker>
+            )}
             {mockAqiPoints.map((point) => (
               <Marker
-                key={point.id}
-                position={[point.lat, point.lng]}
+                key={point.lat + point.lon}
+                position={[parseFloat(point.lat), parseFloat(point.lon)]}
                 eventHandlers={{
                   click: () => handleMarkerClick(point),
                 }}
               >
                 <Popup>
                   <div className="flex flex-col items-center gap-2">
-                    <span className="font-medium">{point.location}</span>
-                    <AqiIndicator value={point.value} size="sm" />
+                    <span className="font-medium">{point.display_name}</span>
+                    <AqiIndicator value={point.aqi || 0} size="sm" />
                   </div>
                 </Popup>
               </Marker>
@@ -141,12 +298,23 @@ const AirQualityMap: React.FC = () => {
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
             <div className="flex items-center">
               <MapPin className="text-vaayu-purple mr-2" size={18} />
-              <span className="font-medium">{selectedLocation.location}</span>
+              <span className="font-medium">{selectedLocation.display_name}</span>
             </div>
             
             <div className="flex items-center">
               <span className="mr-2">Current AQI:</span>
-              <AqiIndicator value={selectedLocation.value} size="sm" />
+              {isLoadingAqi ? (
+                <div className="text-sm text-muted-foreground">Loading...</div>
+              ) : (
+                <>
+                  <AqiIndicator value={selectedLocation.aqi || 0} size="sm" />
+                  {selectedLocation.locationType && (
+                    <span className="text-xs text-muted-foreground ml-2">
+                      ({selectedLocation.locationType} area)
+                    </span>
+                  )}
+                </>
+              )}
             </div>
           </div>
         </div>
